@@ -49,29 +49,23 @@ be misused, open an issue and we'll talk.
 
 ## Features
 
-- **Spotify OAuth (PKCE)** — log in once, your token stays valid and refreshes
-  automatically. No client secret needed.
-- **Liked Songs** — appears as a virtual playlist at the top of your list.
-- **Paste any playlist URL** — public playlists work even if they're not in
-  your library.
 - **ISRC-based matching** — when Spotify provides an ISRC, MrSynker searches
   YouTube by ISRC first for high-accuracy matches, then falls back to
   artist + title with a scoring heuristic that favors `- Topic` channels and
   near-matching durations, and penalizes covers / remixes / live versions.
-- **Parallel downloads** — 1–8 configurable concurrent workers.
-- **Incremental sync** — only downloads new tracks; already-synced tracks are
-  skipped instantly.
-- **Optional orphan removal** — delete local files that were removed from the
-  playlist on Spotify.
-- **Multiple libraries** — each output folder is its own self-contained library
-  with a `synk.data` file inside. Switch between them like a launcher (e.g.
-  one library for the Walkman, another for the car, another for the gym
-  playlist on a USB stick).
-- **Update all** — re-sync every tracked playlist in the current library in
-  one click.
-- **Stop button** — cancels in-flight downloads cleanly.
-- **Plain HTML / CSS / JS UI** — no React, no Vue, no Svelte. No bundler. Just
-  Electron and `<script>` tags.
+- **Incremental sync** — re-running a sync only downloads what's new. Already
+  synced tracks are skipped instantly via the per-folder `synk.data` state file.
+- **Multiple libraries** — each output folder is its own self-contained library.
+  Have one for the Walkman, one for the car, one for a USB stick — switch
+  between them from the topbar and hit "Update all" to refresh everything.
+- **Orphan removal (optional)** — when a song is removed from a playlist on
+  Spotify, MrSynker can delete the local file too.
+- **Parallel downloads** — 1–8 configurable concurrent workers, with proper
+  cancellation that kills in-flight yt-dlp processes.
+- **Liked Songs as a playlist** — your Spotify library appears as a virtual
+  playlist at the top of the list.
+- **Full ID3 tagging** — title, artist, album, year, and cover art (fetched
+  from Spotify, not scraped from YouTube thumbnails).
 
 ---
 
