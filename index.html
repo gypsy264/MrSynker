@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+    <title>MrSynker</title>
+    <link rel="stylesheet" href="renderer/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">MrSynker</div>
+      <div class="status" id="statusBar">
+        <span id="depsStatus" class="pill">deps: ...</span>
+        <span id="authStatus" class="pill">spotify: ...</span>
+        <span id="outputStatus" class="pill clickable" title="Change output folder">output: ...</span>
+      </div>
+      <div class="actions">
+        <button id="settingsBtn" class="ghost" title="Settings">⚙ Settings</button>
+        <button id="loginBtn">Log in to Spotify</button>
+        <button id="logoutBtn" class="ghost" hidden>Log out</button>
+      </div>
+    </header>
+
+    <div id="settingsModal" class="modal" hidden>
+      <div class="modal-backdrop" data-close></div>
+      <div class="modal-body">
+        <div class="modal-header">
+          <h3>Settings</h3>
+          <button class="ghost" data-close>✕</button>
+        </div>
+
+        <div class="modal-section">
+          <h4>Output</h4>
+          <div class="row">
+            <label>Folder</label>
+            <div class="row-value">
+              <input id="settingsOutputDir" type="text" readonly />
+              <button id="settingsChooseDir">Choose…</button>
+            </div>
+          </div>
+          <div class="row">
+            <label>Remove orphans by default</label>
+            <div class="row-value">
+              <input id="settingsRemoveOrphans" type="checkbox" />
+              <span class="hint">Delete local files when removed from playlists</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-section">
+          <h4>Spotify credentials (.env)</h4>
+          <p class="hint">Create an app at <span class="mono">developer.spotify.com/dashboard</span> and add the redirect URI below to it.</p>
+          <div class="row">
+            <label>Client ID</label>
+            <div class="row-value"><input id="envClientId" type="text" placeholder="32-character ID" /></div>
+          </div>
+          <div class="row">
+            <label>Client Secret</label>
+            <div class="row-value"><input id="envClientSecret" type="password" placeholder="optional for PKCE" /></div>
+          </div>
+          <div class="row">
+            <label>Redirect URI</label>
+            <div class="row-value"><input id="envRedirectUri" type="text" /></div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <span id="settingsSavedNote" class="hint"></span>
+          <button data-close>Close</button>
+          <button id="settingsSave" class="primary">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <main>
+      <section class="panel">
+        <h2>Playlists</h2>
+        <div class="paste">
+          <input id="playlistUrl" type="text" placeholder="Paste a Spotify playlist URL or ID..." />
+          <button id="resolveBtn">Add</button>
+        </div>
+        <ul id="playlistList" class="playlist-list"></ul>
+      </section>
+
+      <section class="panel">
+        <h2 id="syncTitle">Sync</h2>
+        <div id="syncControls" class="sync-controls" hidden>
+          <label><input type="checkbox" id="removeOrphans" /> Remove local files no longer in playlist</label>
+          <button id="previewBtn">Preview</button>
+          <button id="syncBtn" class="primary">Start sync</button>
+        </div>
+        <div id="previewSummary" class="preview" hidden></div>
+        <ul id="progressList" class="progress-list"></ul>
+      </section>
+    </main>
+
+    <script src="renderer/app.js"></script>
+  </body>
+</html>

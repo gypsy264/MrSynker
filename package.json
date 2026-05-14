@@ -1,0 +1,21 @@
+{
+  "name": "mrsynker",
+  "version": "0.1.0",
+  "description": "Sync Spotify playlists to local MP3 files for portable players",
+  "license": "ISC",
+  "author": "Emiliano",
+  "type": "commonjs",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "fluent-ffmpeg": "^2.1.3",
+    "node-id3": "^0.2.6",
+    "spotify-web-api-node": "^5.0.2"
+  },
+  "devDependencies": {
+    "electron": "^42.0.1"
+  }
+}
