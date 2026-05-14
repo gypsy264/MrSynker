@@ -6,13 +6,17 @@ const { checkDeps } = require('./src/deps-check');
 const spotifyAuth = require('./src/spotify/auth');
 const spotifyApi = require('./src/spotify/api');
 const runner = require('./src/sync/runner');
+const syncState = require('./src/sync/state');
 
 let mainWindow;
+
+const LOGO_PATH = path.join(__dirname, 'logo', 'mainLogo.png');
 
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1100,
     height: 760,
+    icon: LOGO_PATH,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -35,13 +39,21 @@ function registerIpc() {
   ipcMain.handle('settings:set', (_e, patch) => config.writeSettings(patch));
   ipcMain.handle('settings:getEnv', () => config.readEnv());
   ipcMain.handle('settings:setEnv', (_e, patch) => config.writeEnv(patch));
-  ipcMain.handle('settings:chooseOutputDir', async () => {
+  ipcMain.handle('library:addFromPicker', async () => {
     const res = await dialog.showOpenDialog(mainWindow, {
       properties: ['openDirectory', 'createDirectory'],
-      title: 'Choose output folder',
+      title: 'Choose a library folder',
     });
     if (res.canceled || !res.filePaths[0]) return null;
-    return config.writeSettings({ outputDir: res.filePaths[0] });
+    return config.addLibrary(res.filePaths[0]);
+  });
+  ipcMain.handle('library:setActive', (_e, libPath) => config.setActiveLibrary(libPath));
+  ipcMain.handle('library:remove', (_e, libPath) => config.removeLibrary(libPath));
+  ipcMain.handle('library:rename', (_e, libPath, name) => config.renameLibrary(libPath, name));
+  ipcMain.handle('library:tracked', () => syncState.listTrackedPlaylists());
+  ipcMain.handle('library:removeTrackedPlaylist', (_e, playlistId) => {
+    syncState.removePlaylist(playlistId);
+    return syncState.listTrackedPlaylists();
   });
 
   ipcMain.handle('spotify:status', () => spotifyAuth.status());
@@ -60,10 +72,14 @@ function registerIpc() {
 
   ipcMain.handle('sync:preview', (_e, playlistId) => runner.previewSync(playlistId));
   ipcMain.handle('sync:start', (_e, playlistId, opts) => runner.syncPlaylist(playlistId, opts || {}, emitSync));
+  ipcMain.handle('sync:startAll', (_e, opts) => runner.syncAllTracked(opts || {}, emitSync));
   ipcMain.handle('sync:stop', () => runner.stop());
 }
 
 app.whenReady().then(() => {
+  if (process.platform === 'darwin' && app.dock) {
+    try { app.dock.setIcon(LOGO_PATH); } catch {}
+  }
   registerIpc();
   createWindow();
   app.on('activate', () => {

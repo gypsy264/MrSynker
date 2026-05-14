@@ -14,17 +14,27 @@ loadEnv();
 
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json');
 
+const DEFAULT_LIBRARY_PATH = path.join(app.getPath('music'), 'MrSynker');
+
 const DEFAULTS = {
-  outputDir: path.join(app.getPath('music'), 'MrSynker'),
+  outputDir: DEFAULT_LIBRARY_PATH,
   removeOrphans: false,
   concurrency: 4,
+  libraries: [{ path: DEFAULT_LIBRARY_PATH, name: 'Default', addedAt: new Date().toISOString() }],
   selectedPlaylistIds: [],
 };
 
 function readSettings() {
   try {
     const raw = fs.readFileSync(SETTINGS_FILE, 'utf8');
-    return { ...DEFAULTS, ...JSON.parse(raw) };
+    const merged = { ...DEFAULTS, ...JSON.parse(raw) };
+    if (!Array.isArray(merged.libraries) || merged.libraries.length === 0) {
+      merged.libraries = [{ path: merged.outputDir, name: path.basename(merged.outputDir) || 'Default', addedAt: new Date().toISOString() }];
+    }
+    if (!merged.libraries.find((l) => l.path === merged.outputDir)) {
+      merged.libraries.push({ path: merged.outputDir, name: path.basename(merged.outputDir) || 'Library', addedAt: new Date().toISOString() });
+    }
+    return merged;
   } catch {
     return { ...DEFAULTS };
   }
@@ -75,4 +85,49 @@ function getSpotifyEnv() {
   };
 }
 
-module.exports = { readSettings, writeSettings, getSpotifyEnv, readEnv, writeEnv, SETTINGS_FILE, ENV_FILE };
+function addLibrary(libPath, name) {
+  if (!libPath) throw new Error('Path required');
+  const s = readSettings();
+  const exists = s.libraries.find((l) => l.path === libPath);
+  if (!exists) {
+    s.libraries.push({ path: libPath, name: name || path.basename(libPath) || 'Library', addedAt: new Date().toISOString() });
+  } else if (name && exists.name !== name) {
+    exists.name = name;
+  }
+  s.outputDir = libPath;
+  return writeSettings({ libraries: s.libraries, outputDir: s.outputDir });
+}
+
+function removeLibrary(libPath) {
+  const s = readSettings();
+  const filtered = s.libraries.filter((l) => l.path !== libPath);
+  let outputDir = s.outputDir;
+  if (outputDir === libPath) {
+    outputDir = filtered[0]?.path || DEFAULT_LIBRARY_PATH;
+  }
+  if (filtered.length === 0) {
+    filtered.push({ path: DEFAULT_LIBRARY_PATH, name: 'Default', addedAt: new Date().toISOString() });
+    outputDir = DEFAULT_LIBRARY_PATH;
+  }
+  return writeSettings({ libraries: filtered, outputDir });
+}
+
+function setActiveLibrary(libPath) {
+  const s = readSettings();
+  if (!s.libraries.find((l) => l.path === libPath)) throw new Error('Library not found');
+  return writeSettings({ outputDir: libPath });
+}
+
+function renameLibrary(libPath, name) {
+  const s = readSettings();
+  const lib = s.libraries.find((l) => l.path === libPath);
+  if (!lib) throw new Error('Library not found');
+  lib.name = name;
+  return writeSettings({ libraries: s.libraries });
+}
+
+module.exports = {
+  readSettings, writeSettings, getSpotifyEnv, readEnv, writeEnv,
+  addLibrary, removeLibrary, setActiveLibrary, renameLibrary,
+  SETTINGS_FILE, ENV_FILE,
+};

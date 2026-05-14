@@ -38,7 +38,7 @@ async function previewSync(playlistId) {
   fs.mkdirSync(outputDir, { recursive: true });
   const meta = await getPlaylistMeta(playlistId);
   const tracks = await getPlaylistTracks(playlistId);
-  const stateEntry = state.getPlaylist(playlistId);
+  const stateEntry = state.getPlaylist(playlistId, outputDir);
   const d = diff(tracks, stateEntry, outputDir);
   return { meta, tracks, diff: d, outputDir };
 }
@@ -61,7 +61,7 @@ async function processTrack(playlistId, t, outputDir, token, emit) {
     });
     if (token.cancelled) throw new Error('cancelled');
     await writeTags(filePath, t);
-    state.upsertTrack(playlistId, t.id, { file: path.basename(filePath), isrc: t.isrc || null });
+    state.upsertTrack(playlistId, t.id, { file: path.basename(filePath), isrc: t.isrc || null }, outputDir);
     emit({ kind: 'track:done', playlistId, trackId: t.id, file: path.basename(filePath) });
     return { ok: true };
   } catch (e) {
@@ -110,7 +110,7 @@ async function syncPlaylist(playlistId, opts = {}, emit = () => {}) {
     emit({ kind: 'playlist:start', playlistId, name: meta.name, concurrency });
 
     const tracks = await getPlaylistTracks(playlistId);
-    const stateEntry = state.getPlaylist(playlistId);
+    const stateEntry = state.getPlaylist(playlistId, outputDir);
     const d = diff(tracks, stateEntry, outputDir);
     emit({ kind: 'diff', playlistId, added: d.added.length, removed: d.removed.length, existing: d.existing.length });
 
@@ -121,12 +121,12 @@ async function syncPlaylist(playlistId, opts = {}, emit = () => {}) {
       for (const r of d.removed) {
         const full = path.join(outputDir, r.file);
         try { fs.unlinkSync(full); } catch {}
-        state.removeTrack(playlistId, r.trackId);
+        state.removeTrack(playlistId, r.trackId, outputDir);
         emit({ kind: 'track:removed', playlistId, trackId: r.trackId, file: r.file });
       }
     }
 
-    state.touch(playlistId, meta.name);
+    state.touch(playlistId, meta.name, outputDir);
     emit({
       kind: 'playlist:done',
       playlistId,
@@ -142,4 +142,30 @@ async function syncPlaylist(playlistId, opts = {}, emit = () => {}) {
   }
 }
 
-module.exports = { previewSync, syncPlaylist, stop };
+async function syncAllTracked(opts = {}, emit = () => {}) {
+  const { outputDir } = readSettings();
+  const tracked = state.listTrackedPlaylists(outputDir);
+  if (!tracked.length) {
+    emit({ kind: 'library:empty' });
+    return { playlists: 0, downloaded: 0, failed: 0 };
+  }
+  emit({ kind: 'library:start', total: tracked.length });
+  let totalDownloaded = 0;
+  let totalFailed = 0;
+  let stopped = false;
+  for (const p of tracked) {
+    if (stopped) break;
+    try {
+      const res = await syncPlaylist(p.id, opts, emit);
+      totalDownloaded += res.downloaded;
+      totalFailed += res.failed;
+      if (res.stopped) { stopped = true; break; }
+    } catch (e) {
+      emit({ kind: 'library:playlist-error', playlistId: p.id, error: e.message });
+    }
+  }
+  emit({ kind: 'library:done', playlists: tracked.length, downloaded: totalDownloaded, failed: totalFailed, stopped });
+  return { playlists: tracked.length, downloaded: totalDownloaded, failed: totalFailed, stopped };
+}
+
+module.exports = { previewSync, syncPlaylist, syncAllTracked, stop };

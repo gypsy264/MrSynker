@@ -8,11 +8,19 @@
   </head>
   <body>
     <header class="topbar">
-      <div class="brand">MrSynker</div>
+      <div class="brand">
+        <img src="logo/mainLogo.png" alt="" class="brand-logo" />
+        <span>MrSynker</span>
+      </div>
       <div class="status" id="statusBar">
         <span id="depsStatus" class="pill">deps: ...</span>
         <span id="authStatus" class="pill">spotify: ...</span>
-        <span id="outputStatus" class="pill clickable" title="Change output folder">output: ...</span>
+        <div class="library-picker">
+          <span class="pill-label">library</span>
+          <select id="librarySelect"></select>
+          <button id="addLibraryBtn" class="ghost" title="Add a library folder">+</button>
+          <button id="removeLibraryBtn" class="ghost" title="Remove current library from list">−</button>
+        </div>
       </div>
       <div class="actions">
         <button id="settingsBtn" class="ghost" title="Settings">⚙ Settings</button>
@@ -43,6 +51,14 @@
             <div class="row-value">
               <input id="settingsRemoveOrphans" type="checkbox" />
               <span class="hint">Delete local files when removed from playlists</span>
+            </div>
+          </div>
+          <div class="row">
+            <label>Concurrent downloads</label>
+            <div class="row-value">
+              <input id="settingsConcurrency" type="range" min="1" max="8" step="1" />
+              <span id="settingsConcurrencyVal" class="hint mono">4</span>
+              <span class="hint">parallel workers (1–8)</span>
             </div>
           </div>
         </div>
@@ -83,11 +99,22 @@
       </section>
 
       <section class="panel">
-        <h2 id="syncTitle">Sync</h2>
+        <div class="library-header">
+          <h2>Library</h2>
+          <div class="library-actions">
+            <button id="updateAllBtn" class="primary">Update all</button>
+            <button id="stopAllBtn" class="danger" hidden>Stop</button>
+          </div>
+        </div>
+        <div id="libraryEmpty" class="hint" hidden>This library has no tracked playlists yet. Pick a playlist on the left and sync it to start tracking.</div>
+        <ul id="trackedList" class="playlist-list"></ul>
+
+        <h2 id="syncTitle" style="margin-top:18px">Sync</h2>
         <div id="syncControls" class="sync-controls" hidden>
           <label><input type="checkbox" id="removeOrphans" /> Remove local files no longer in playlist</label>
           <button id="previewBtn">Preview</button>
           <button id="syncBtn" class="primary">Start sync</button>
+          <button id="stopBtn" class="danger" hidden>Stop</button>
         </div>
         <div id="previewSummary" class="preview" hidden></div>
         <ul id="progressList" class="progress-list"></ul>

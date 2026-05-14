@@ -4,10 +4,12 @@ const state = {
   settings: null,
   authed: false,
   playlists: [],
+  trackedPlaylists: [],
   selectedPlaylistId: null,
   selectedPlaylistName: '',
   preview: null,
   rows: new Map(),
+  syncing: false,
 };
 
 function setPill(el, text, cls) {
@@ -27,7 +29,68 @@ async function refreshStatus() {
   $('logoutBtn').hidden = !state.authed;
 
   state.settings = await window.api.getSettings();
-  setPill($('outputStatus'), `output: ${state.settings.outputDir}`);
+  renderLibraryPicker();
+  await refreshTrackedPlaylists();
+}
+
+function renderLibraryPicker() {
+  const sel = $('librarySelect');
+  sel.innerHTML = '';
+  for (const lib of state.settings.libraries) {
+    const opt = document.createElement('option');
+    opt.value = lib.path;
+    opt.textContent = lib.name;
+    opt.title = lib.path;
+    if (lib.path === state.settings.outputDir) opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
+
+async function refreshTrackedPlaylists() {
+  try {
+    state.trackedPlaylists = await window.api.getTrackedPlaylists();
+  } catch {
+    state.trackedPlaylists = [];
+  }
+  renderTracked();
+  renderPlaylists(state.playlists);
+}
+
+function fmtDate(iso) {
+  if (!iso) return 'never';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch { return iso; }
+}
+
+function renderTracked() {
+  const ul = $('trackedList');
+  ul.innerHTML = '';
+  const empty = $('libraryEmpty');
+  empty.hidden = state.trackedPlaylists.length > 0;
+  $('updateAllBtn').disabled = state.trackedPlaylists.length === 0;
+  const trackedIds = new Set(state.trackedPlaylists.map((p) => p.id));
+  for (const p of state.trackedPlaylists) {
+    const li = document.createElement('li');
+    li.dataset.id = p.id;
+    if (p.id === state.selectedPlaylistId) li.classList.add('selected');
+    li.innerHTML = `
+      <div class="liked-art" style="background:linear-gradient(135deg,#1e3a8a,#1db954)">♪</div>
+      <div class="meta">
+        <div class="name"></div>
+        <div class="sub tracked-meta"></div>
+      </div>
+    `;
+    li.querySelector('.name').textContent = p.name || p.id;
+    li.querySelector('.sub').textContent = `${p.trackCount} synced · last ${fmtDate(p.lastSynced)}`;
+    li.addEventListener('click', () => {
+      const matched = state.playlists.find((x) => x.id === p.id);
+      selectPlaylist(matched || { id: p.id, name: p.name || p.id, trackCount: p.trackCount });
+    });
+    ul.appendChild(li);
+  }
+  return trackedIds;
 }
 
 async function loadPlaylists() {
@@ -68,6 +131,12 @@ function renderPlaylists(items) {
       const badge = document.createElement('span');
       badge.className = 'badge';
       badge.textContent = 'LIKED';
+      nameEl.appendChild(badge);
+    }
+    if (state.trackedPlaylists.some((tp) => tp.id === p.id)) {
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.textContent = 'TRACKED';
       nameEl.appendChild(badge);
     }
     li.querySelector('.sub').textContent = `${p.trackCount} tracks · ${p.owner || ''}`;
@@ -113,18 +182,32 @@ async function doPreview() {
 
 async function doSync() {
   if (!state.selectedPlaylistId) return;
-  $('syncBtn').disabled = true;
+  $('syncBtn').hidden = true;
+  $('stopBtn').hidden = false;
   $('previewBtn').disabled = true;
   $('progressList').innerHTML = '';
   state.rows.clear();
   try {
-    await window.api.startSync(state.selectedPlaylistId, { removeOrphans: $('removeOrphans').checked });
+    await window.api.startSync(state.selectedPlaylistId, {
+      removeOrphans: $('removeOrphans').checked,
+      concurrency: state.settings?.concurrency ?? 4,
+    });
   } catch (e) {
     alert(`Sync failed: ${e.message}`);
   } finally {
-    $('syncBtn').disabled = false;
+    $('syncBtn').hidden = false;
+    $('stopBtn').hidden = true;
+    $('stopBtn').disabled = false;
+    $('stopBtn').textContent = 'Stop';
     $('previewBtn').disabled = false;
+    await refreshTrackedPlaylists();
   }
+}
+
+async function doStop() {
+  $('stopBtn').disabled = true;
+  $('stopBtn').textContent = 'Stopping…';
+  try { await window.api.stopSync(); } catch {}
 }
 
 function ensureRow(trackId, label) {
@@ -182,6 +265,14 @@ function handleSyncEvent(ev) {
       }
       break;
     }
+    case 'track:cancelled': {
+      const row = state.rows.get(ev.trackId);
+      if (row) {
+        row.stateEl.textContent = 'stopped';
+        row.stateEl.classList.add('error');
+      }
+      break;
+    }
     case 'track:removed': {
       const li = document.createElement('li');
       li.innerHTML = `<span class="title"></span><span class="state error">removed</span>`;
@@ -191,7 +282,12 @@ function handleSyncEvent(ev) {
     }
     case 'playlist:done': {
       const li = document.createElement('li');
-      li.innerHTML = `<span class="title">Finished — ${ev.downloaded} new, ${ev.failed} failed, ${ev.skipped} already synced</span><span class="state done">complete</span>`;
+      const cancelled = ev.cancelled || 0;
+      const label = ev.stopped
+        ? `Stopped — ${ev.downloaded} new, ${cancelled} cancelled, ${ev.failed} failed, ${ev.skipped} already synced`
+        : `Finished — ${ev.downloaded} new, ${ev.failed} failed, ${ev.skipped} already synced`;
+      li.innerHTML = `<span class="title"></span><span class="state ${ev.stopped ? 'error' : 'done'}">${ev.stopped ? 'stopped' : 'complete'}</span>`;
+      li.querySelector('.title').textContent = label;
       $('progressList').appendChild(li);
       break;
     }
@@ -234,18 +330,71 @@ $('logoutBtn').addEventListener('click', async () => {
   await refreshStatus();
 });
 
-$('outputStatus').addEventListener('click', async () => {
-  const next = await window.api.chooseOutputDir();
+$('librarySelect').addEventListener('change', async (e) => {
+  const next = await window.api.setActiveLibrary(e.target.value);
+  state.settings = next;
+  state.selectedPlaylistId = null;
+  $('syncControls').hidden = true;
+  $('previewSummary').hidden = true;
+  $('progressList').innerHTML = '';
+  state.rows.clear();
+  $('syncTitle').textContent = 'Sync';
+  await refreshTrackedPlaylists();
+});
+
+$('addLibraryBtn').addEventListener('click', async () => {
+  const next = await window.api.addLibraryFromPicker();
   if (next) {
     state.settings = next;
-    setPill($('outputStatus'), `output: ${next.outputDir}`);
+    renderLibraryPicker();
+    await refreshTrackedPlaylists();
   }
+});
+
+$('removeLibraryBtn').addEventListener('click', async () => {
+  if (!confirm('Remove this library from the list? Files on disk are NOT deleted.')) return;
+  const next = await window.api.removeLibrary(state.settings.outputDir);
+  state.settings = next;
+  renderLibraryPicker();
+  await refreshTrackedPlaylists();
+});
+
+$('updateAllBtn').addEventListener('click', async () => {
+  if (!state.trackedPlaylists.length || state.syncing) return;
+  if (!state.authed) { alert('Log in to Spotify first.'); return; }
+  state.syncing = true;
+  $('updateAllBtn').hidden = true;
+  $('stopAllBtn').hidden = false;
+  $('progressList').innerHTML = '';
+  state.rows.clear();
+  try {
+    await window.api.startSyncAll({
+      removeOrphans: $('removeOrphans').checked,
+      concurrency: state.settings?.concurrency ?? 4,
+    });
+  } catch (e) {
+    alert(`Update failed: ${e.message}`);
+  } finally {
+    state.syncing = false;
+    $('updateAllBtn').hidden = false;
+    $('stopAllBtn').hidden = true;
+    $('stopAllBtn').disabled = false;
+    $('stopAllBtn').textContent = 'Stop';
+    await refreshTrackedPlaylists();
+  }
+});
+
+$('stopAllBtn').addEventListener('click', async () => {
+  $('stopAllBtn').disabled = true;
+  $('stopAllBtn').textContent = 'Stopping…';
+  try { await window.api.stopSync(); } catch {}
 });
 
 $('resolveBtn').addEventListener('click', resolvePastedUrl);
 $('playlistUrl').addEventListener('keydown', (e) => { if (e.key === 'Enter') resolvePastedUrl(); });
 $('previewBtn').addEventListener('click', doPreview);
 $('syncBtn').addEventListener('click', doSync);
+$('stopBtn').addEventListener('click', doStop);
 
 window.api.onSyncEvent(handleSyncEvent);
 
@@ -255,6 +404,9 @@ async function openSettings() {
   const [settings, env] = await Promise.all([window.api.getSettings(), window.api.getEnv()]);
   $('settingsOutputDir').value = settings.outputDir;
   $('settingsRemoveOrphans').checked = !!settings.removeOrphans;
+  const concurrency = Math.max(1, Math.min(8, settings.concurrency ?? 4));
+  $('settingsConcurrency').value = concurrency;
+  $('settingsConcurrencyVal').textContent = concurrency;
   $('envClientId').value = env.SPOTIFY_CLIENT_ID || '';
   $('envClientSecret').value = env.SPOTIFY_CLIENT_SECRET || '';
   $('envRedirectUri').value = env.SPOTIFY_REDIRECT_URI || '';
@@ -268,13 +420,17 @@ settingsModal.querySelectorAll('[data-close]').forEach((el) => el.addEventListen
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !settingsModal.hidden) closeSettings(); });
 
 $('settingsBtn').addEventListener('click', openSettings);
+$('settingsConcurrency').addEventListener('input', (e) => {
+  $('settingsConcurrencyVal').textContent = e.target.value;
+});
 
 $('settingsChooseDir').addEventListener('click', async () => {
-  const next = await window.api.chooseOutputDir();
+  const next = await window.api.addLibraryFromPicker();
   if (next) {
     state.settings = next;
     $('settingsOutputDir').value = next.outputDir;
-    setPill($('outputStatus'), `output: ${next.outputDir}`);
+    renderLibraryPicker();
+    await refreshTrackedPlaylists();
   }
 });
 
@@ -284,6 +440,7 @@ $('settingsSave').addEventListener('click', async () => {
   try {
     const updatedSettings = await window.api.setSettings({
       removeOrphans: $('settingsRemoveOrphans').checked,
+      concurrency: parseInt($('settingsConcurrency').value, 10) || 4,
     });
     await window.api.setEnv({
       SPOTIFY_CLIENT_ID: $('envClientId').value.trim(),
