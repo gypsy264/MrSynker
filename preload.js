@@ -16,7 +16,9 @@ contextBridge.exposeInMainWorld('api', {
   renameLibrary: (path, name) => ipcRenderer.invoke('library:rename', path, name),
   getTrackedPlaylists: () => ipcRenderer.invoke('library:tracked'),
   getTrackedTracks: (playlistId, opts) => ipcRenderer.invoke('library:trackedTracks', playlistId, opts || {}),
+  getAllLibraryTracks: () => ipcRenderer.invoke('library:allTracks'),
   inspectOne: (file) => ipcRenderer.invoke('library:inspectOne', file),
+  mediaUrlFor: (file) => `mrsynker://library/${encodeURIComponent(file)}`,
   removeTrackedPlaylist: (playlistId) => ipcRenderer.invoke('library:removeTrackedPlaylist', playlistId),
 
   spotifyStatus: () => ipcRenderer.invoke('spotify:status'),

@@ -1,5 +1,12 @@
 const path = require('path');
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
+const fs = require('fs');
+const { Readable } = require('stream');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, protocol } = require('electron');
+
+protocol.registerSchemesAsPrivileged([{
+  scheme: 'mrsynker',
+  privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: false },
+}]);
 
 const IS_MAC = process.platform === 'darwin';
 
@@ -83,6 +90,70 @@ function emitSync(payload) {
   }
 }
 
+const AUDIO_MIME = {
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
+  flac: 'audio/flac',
+  m4a: 'audio/mp4',
+  ogg: 'audio/ogg',
+};
+
+function mimeFor(filePath) {
+  const ext = path.extname(filePath).slice(1).toLowerCase();
+  return AUDIO_MIME[ext] || 'application/octet-stream';
+}
+
+function registerMediaProtocol() {
+  protocol.handle('mrsynker', async (req) => {
+    try {
+      const url = new URL(req.url);
+      const { outputDir } = config.readSettings();
+      const rel = decodeURIComponent(url.pathname).replace(/^\//, '');
+      const filePath = path.resolve(outputDir, rel);
+      const safeRoot = path.resolve(outputDir);
+      if (!filePath.startsWith(safeRoot + path.sep) && filePath !== safeRoot) {
+        return new Response('Forbidden', { status: 403 });
+      }
+      if (!fs.existsSync(filePath)) return new Response('Not found', { status: 404 });
+
+      const stat = fs.statSync(filePath);
+      const total = stat.size;
+      const range = req.headers.get('range');
+      const type = mimeFor(filePath);
+
+      if (range) {
+        const m = range.match(/bytes=(\d+)-(\d+)?/);
+        if (m) {
+          const start = parseInt(m[1], 10);
+          const end = m[2] ? parseInt(m[2], 10) : total - 1;
+          const chunk = end - start + 1;
+          const nodeStream = fs.createReadStream(filePath, { start, end });
+          return new Response(Readable.toWeb(nodeStream), {
+            status: 206,
+            headers: {
+              'Content-Range': `bytes ${start}-${end}/${total}`,
+              'Accept-Ranges': 'bytes',
+              'Content-Length': String(chunk),
+              'Content-Type': type,
+            },
+          });
+        }
+      }
+
+      const nodeStream = fs.createReadStream(filePath);
+      return new Response(Readable.toWeb(nodeStream), {
+        headers: {
+          'Content-Length': String(total),
+          'Accept-Ranges': 'bytes',
+          'Content-Type': type,
+        },
+      });
+    } catch (e) {
+      return new Response(`Error: ${e.message}`, { status: 500 });
+    }
+  });
+}
+
 function registerIpc() {
   ipcMain.handle('deps:check', () => checkDeps());
 
@@ -118,6 +189,26 @@ function registerIpc() {
     syncState.removePlaylist(playlistId);
     return syncState.listTrackedPlaylists();
   });
+  ipcMain.handle('library:allTracks', () => {
+    const { outputDir } = config.readSettings();
+    const s = syncState.read(outputDir);
+    const out = [];
+    for (const [playlistId, entry] of Object.entries(s.playlists || {})) {
+      for (const [trackId, t] of Object.entries(entry.tracks || {})) {
+        out.push({
+          trackId,
+          playlistId,
+          playlistName: entry.name || playlistId,
+          file: t.file,
+          ext: t.ext || (t.file?.split('.').pop() || '').toLowerCase(),
+        });
+      }
+    }
+    // de-dupe by file path (same track in multiple playlists)
+    const seen = new Set();
+    return out.filter((t) => (seen.has(t.file) ? false : (seen.add(t.file), true)));
+  });
+
   ipcMain.handle('library:inspectOne', async (_e, fileRelOrAbs) => {
     const { outputDir } = config.readSettings();
     const full = path.isAbsolute(fileRelOrAbs) ? fileRelOrAbs : path.join(outputDir, fileRelOrAbs);
@@ -182,6 +273,7 @@ app.whenReady().then(() => {
   if (process.platform === 'darwin' && app.dock) {
     try { app.dock.setIcon(DOCK_ICON_PATH); } catch {}
   }
+  registerMediaProtocol();
   buildMenu();
   registerIpc();
   createWindow();
