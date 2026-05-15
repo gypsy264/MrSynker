@@ -1,14 +1,17 @@
 const { spawn } = require('child_process');
 const path = require('path');
 
-function downloadAudio({ url, outputDir, basename, onProgress, token }) {
+const SUPPORTED = new Set(['mp3', 'wav', 'flac']);
+
+function downloadAudio({ url, outputDir, basename, format = 'mp3', onProgress, token }) {
+  const fmt = SUPPORTED.has(format) ? format : 'mp3';
   return new Promise((resolve, reject) => {
     const outTemplate = path.join(outputDir, `${basename}.%(ext)s`);
     const args = [
       url,
       '-f', 'bestaudio/best',
       '-x',
-      '--audio-format', 'mp3',
+      '--audio-format', fmt,
       '--audio-quality', '0',
       '--no-playlist',
       '--no-warnings',
@@ -32,9 +35,9 @@ function downloadAudio({ url, outputDir, basename, onProgress, token }) {
       if (token) token.unregister(proc);
       if (token?.cancelled) return reject(new Error('cancelled'));
       if (code !== 0) return reject(new Error(`yt-dlp exited ${code}${signal ? ` (${signal})` : ''}: ${stderr}`));
-      resolve(path.join(outputDir, `${basename}.mp3`));
+      resolve(path.join(outputDir, `${basename}.${fmt}`));
     });
   });
 }
 
-module.exports = { downloadAudio };
+module.exports = { downloadAudio, SUPPORTED };

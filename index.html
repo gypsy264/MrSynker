@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="renderer/styles.css" />
   </head>
   <body>
-    <header class="topbar">
+    <header class="topbar" id="topbar">
       <div class="brand">
         <img src="logo/mainLogo.png" alt="" class="brand-logo" />
         <span>MrSynker</span>
@@ -27,7 +27,107 @@
         <button id="loginBtn">Log in to Spotify</button>
         <button id="logoutBtn" class="ghost" hidden>Log out</button>
       </div>
+      <div id="windowControls" class="window-controls" hidden>
+        <button id="winMinimize" class="wc-btn" aria-label="Minimize" title="Minimize">
+          <svg width="10" height="10" viewBox="0 0 10 10"><path d="M0 5 H10" stroke="currentColor" stroke-width="1" fill="none"/></svg>
+        </button>
+        <button id="winMaximize" class="wc-btn" aria-label="Maximize" title="Maximize">
+          <svg width="10" height="10" viewBox="0 0 10 10"><rect x="1" y="1" width="8" height="8" stroke="currentColor" stroke-width="1" fill="none"/></svg>
+        </button>
+        <button id="winClose" class="wc-btn wc-close" aria-label="Close" title="Close">
+          <svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1 L9 9 M9 1 L1 9" stroke="currentColor" stroke-width="1" fill="none"/></svg>
+        </button>
+      </div>
     </header>
+
+    <div id="tracksModal" class="modal" hidden>
+      <div class="modal-backdrop" data-close></div>
+      <div class="modal-body tracks-modal">
+        <div class="modal-header">
+          <h3 id="tracksModalTitle">Tracks</h3>
+          <div class="tracks-header-actions">
+            <button id="tracksRefreshBtn" class="ghost" title="Re-inspect files">↻</button>
+            <button class="ghost" data-close>✕</button>
+          </div>
+        </div>
+        <div id="tracksMeta" class="hint" style="margin-bottom:10px"></div>
+        <div id="tracksGrid" class="tracks-grid"></div>
+      </div>
+    </div>
+
+    <div id="onboarding" class="onboarding" hidden>
+      <div class="onboarding-card">
+        <header class="onboarding-header">
+          <img src="logo/mainLogo.png" alt="" class="onboarding-logo" />
+          <div>
+            <h1>Welcome to MrSynker</h1>
+            <p class="hint" id="onboardSubtitle">Let's get you set up — takes about a minute.</p>
+          </div>
+        </header>
+
+        <div class="onboarding-steps">
+          <span class="step" data-step="1">1 · Welcome</span>
+          <span class="step" data-step="2">2 · Terms</span>
+          <span class="step" data-step="3">3 · Spotify</span>
+        </div>
+
+        <section class="onboarding-step" data-step="1">
+          <h3>What MrSynker does</h3>
+          <p>Sync your Spotify playlists to local MP3 files — perfect for filling a Walkman, a car USB stick, or anything that plays MP3s.</p>
+          <ul class="checklist">
+            <li>Read playlists and Liked Songs from your Spotify account</li>
+            <li>Find each track on YouTube via yt-dlp using ISRC matching</li>
+            <li>Convert to MP3 and write full ID3 tags (with cover art)</li>
+            <li>Track sync state per folder so updates are incremental</li>
+          </ul>
+          <p class="hint"><strong>You'll need:</strong> <span class="mono">yt-dlp</span> and <span class="mono">ffmpeg</span> installed and on your PATH, plus a (free) Spotify Developer app.</p>
+        </section>
+
+        <section class="onboarding-step" data-step="2" hidden>
+          <h3>Terms &amp; liability</h3>
+          <div class="terms-body">
+            <p><strong>MrSynker is a tool. It does not host, distribute, or own any music.</strong></p>
+            <ul>
+              <li>All music, cover art, and metadata sourced through this app belong to their respective rights holders.</li>
+              <li>Audio is downloaded via <span class="mono">yt-dlp</span> from publicly accessible YouTube / YouTube Music URLs. The legality of doing so depends on your country, the specific content, and your intended use.</li>
+              <li>Spotify metadata is read via Spotify's official Web API using your own developer credentials — MrSynker never sees or stores Spotify content itself, only track metadata.</li>
+              <li><strong>You are solely responsible for how you use this software.</strong> Use it only with content you have the right to download in your jurisdiction (e.g. music you already own, public-domain works, or where personal-use copies are legally permitted).</li>
+              <li>The authors and contributors of MrSynker accept <strong>no liability</strong> for any misuse, copyright infringement, terms-of-service violations, broken speakers, lost Walkmans, or hurt feelings.</li>
+            </ul>
+            <p class="hint">This is a half-vibe-coded hobby project. Please use responsibly.</p>
+          </div>
+          <label class="terms-accept">
+            <input type="checkbox" id="onboardAccept" />
+            <span>I have read and accept the terms above.</span>
+          </label>
+        </section>
+
+        <section class="onboarding-step" data-step="3" hidden>
+          <h3>Connect to Spotify</h3>
+          <p class="hint">Create a free Spotify Developer app, copy your <strong>Client ID</strong> below, and add the redirect URI to your app settings.</p>
+          <ol class="numbered">
+            <li>Go to <span class="mono">developer.spotify.com/dashboard</span> and click <strong>Create app</strong>.</li>
+            <li>Add <span class="mono">http://127.0.0.1:8888/callback</span> to the app's <strong>Redirect URIs</strong>.</li>
+            <li>Save, then copy the <strong>Client ID</strong> from the app page.</li>
+          </ol>
+          <div class="form-grid">
+            <label>Client ID</label>
+            <input id="onboardClientId" type="text" placeholder="32-character ID" />
+            <label>Client Secret <span class="hint">(optional)</span></label>
+            <input id="onboardClientSecret" type="password" placeholder="leave blank for PKCE" />
+            <label>Redirect URI</label>
+            <input id="onboardRedirectUri" type="text" value="http://127.0.0.1:8888/callback" />
+          </div>
+          <p class="hint" id="onboardError" hidden></p>
+        </section>
+
+        <footer class="onboarding-footer">
+          <button id="onboardBack" class="ghost">Back</button>
+          <span class="onboarding-spacer"></span>
+          <button id="onboardNext" class="primary">Continue</button>
+        </footer>
+      </div>
+    </div>
 
     <div id="settingsModal" class="modal" hidden>
       <div class="modal-backdrop" data-close></div>
@@ -59,6 +159,16 @@
               <input id="settingsConcurrency" type="range" min="1" max="8" step="1" />
               <span id="settingsConcurrencyVal" class="hint mono">4</span>
               <span class="hint">parallel workers (1–8)</span>
+            </div>
+          </div>
+          <div class="row">
+            <label>Audio format</label>
+            <div class="row-value">
+              <select id="settingsAudioFormat">
+                <option value="mp3">MP3 (smallest, universal — recommended for Walkmans)</option>
+                <option value="flac">FLAC (lossless, larger)</option>
+                <option value="wav">WAV (uncompressed, no tags)</option>
+              </select>
             </div>
           </div>
         </div>
@@ -117,6 +227,24 @@
           <button id="stopBtn" class="danger" hidden>Stop</button>
         </div>
         <div id="previewSummary" class="preview" hidden></div>
+        <div id="previewLists" class="preview-lists" hidden>
+          <details open id="previewAddedDetails">
+            <summary><span class="dot added"></span> To download <span id="previewAddedCount" class="hint"></span></summary>
+            <ul id="previewAdded" class="preview-list"></ul>
+          </details>
+          <details id="previewExistingDetails">
+            <summary><span class="dot existing"></span> Already synced <span id="previewExistingCount" class="hint"></span></summary>
+            <ul id="previewExisting" class="preview-list"></ul>
+          </details>
+          <details id="previewRemovedDetails">
+            <summary><span class="dot removed"></span> To remove <span id="previewRemovedCount" class="hint"></span></summary>
+            <ul id="previewRemoved" class="preview-list"></ul>
+          </details>
+        </div>
+        <div id="completedStrip" class="completed-strip" hidden>
+          <div class="completed-strip-label">Just downloaded</div>
+          <div id="completedStripRow" class="completed-strip-row"></div>
+        </div>
         <ul id="progressList" class="progress-list"></ul>
       </section>
     </main>

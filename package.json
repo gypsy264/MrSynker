@@ -3,11 +3,19 @@
   "version": "0.1.0",
   "description": "Sync Spotify playlists to local MP3 files for portable players",
   "license": "ISC",
-  "author": "Emiliano",
+  "author": {
+    "name": "Emiliano",
+    "email": "emiliano@gasify.app"
+  },
   "type": "commonjs",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "dist": "electron-builder",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux",
+    "dist:all": "electron-builder --mac --win --linux"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
@@ -16,6 +24,42 @@
     "spotify-web-api-node": "^5.0.2"
   },
   "devDependencies": {
-    "electron": "^42.0.1"
+    "electron": "^42.0.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": 
+  {
+  "appId": "com.emicanto.mrsynker",
+  "productName": "MrSynker",
+  "files": ["main.js", "preload.js", "index.html", "renderer/**", "src/**", "logo/**"],
+  "mac": {
+    "icon": "logo/mainLogo-padded.png",
+    "category": "public.app-category.music",
+    "identity": null,
+    "target": [
+      { "target": "dmg", "arch": ["universal"] },
+      { "target": "zip", "arch": ["universal"] }
+    ]
+  },
+  "win": {
+    "icon": "logo/mainLogo-padded.png",
+    "target": [
+      { "target": "nsis", "arch": ["x64", "arm64"] },
+      { "target": "portable", "arch": ["x64"] }
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true
+  },
+  "linux": {
+    "icon": "logo/mainLogo-padded.png",
+    "category": "Audio",
+    "maintainer": "Emiliano <emycanto2008@gmail.com>",
+    "target": [
+      { "target": "AppImage", "arch": ["x64", "arm64"] },
+      { "target": "deb", "arch": ["x64", "arm64"] }
+    ]
+  }
   }
 }

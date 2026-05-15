@@ -3,7 +3,20 @@ const path = require('path');
 const { app } = require('electron');
 const dotenv = require('dotenv');
 
-const ENV_FILE = path.join(app.getAppPath(), '.env');
+const USER_DATA = app.getPath('userData');
+const APP_PATH = app.getAppPath();
+
+const DEV_ENV_FILE = path.join(APP_PATH, '.env');
+const USER_ENV_FILE = path.join(USER_DATA, '.env');
+
+function resolveEnvFile() {
+  if (app.isPackaged) return USER_ENV_FILE;
+  if (fs.existsSync(DEV_ENV_FILE)) return DEV_ENV_FILE;
+  if (fs.existsSync(USER_ENV_FILE)) return USER_ENV_FILE;
+  return DEV_ENV_FILE;
+}
+
+const ENV_FILE = resolveEnvFile();
 
 function loadEnv() {
   const result = dotenv.config({ path: ENV_FILE, override: true });
@@ -12,7 +25,8 @@ function loadEnv() {
 
 loadEnv();
 
-const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json');
+const SETTINGS_FILE = path.join(USER_DATA, 'settings.json');
+const ONBOARD_FILE = path.join(USER_DATA, 'onboarded.json');
 
 const DEFAULT_LIBRARY_PATH = path.join(app.getPath('music'), 'MrSynker');
 
@@ -20,6 +34,7 @@ const DEFAULTS = {
   outputDir: DEFAULT_LIBRARY_PATH,
   removeOrphans: false,
   concurrency: 4,
+  audioFormat: 'mp3',
   libraries: [{ path: DEFAULT_LIBRARY_PATH, name: 'Default', addedAt: new Date().toISOString() }],
   selectedPlaylistIds: [],
 };
@@ -72,9 +87,34 @@ function writeEnv(patch) {
   const body = ENV_KEYS
     .map((k) => `${k}=${next[k] ?? ''}`)
     .join('\n') + '\n';
+  fs.mkdirSync(path.dirname(ENV_FILE), { recursive: true });
   fs.writeFileSync(ENV_FILE, body);
   for (const k of ENV_KEYS) process.env[k] = next[k] ?? '';
   return readEnv();
+}
+
+function readOnboarding() {
+  try {
+    return JSON.parse(fs.readFileSync(ONBOARD_FILE, 'utf8'));
+  } catch {
+    return { completed: false, acceptedTerms: false, acceptedAt: null, version: 1 };
+  }
+}
+
+function writeOnboarding(patch) {
+  const current = readOnboarding();
+  const next = { ...current, ...patch };
+  fs.mkdirSync(path.dirname(ONBOARD_FILE), { recursive: true });
+  fs.writeFileSync(ONBOARD_FILE, JSON.stringify(next, null, 2));
+  return next;
+}
+
+function needsOnboarding() {
+  const ob = readOnboarding();
+  if (!ob.completed || !ob.acceptedTerms) return true;
+  const env = readEnv();
+  if (!env.SPOTIFY_CLIENT_ID) return true;
+  return false;
 }
 
 function getSpotifyEnv() {
@@ -129,5 +169,6 @@ function renameLibrary(libPath, name) {
 module.exports = {
   readSettings, writeSettings, getSpotifyEnv, readEnv, writeEnv,
   addLibrary, removeLibrary, setActiveLibrary, renameLibrary,
-  SETTINGS_FILE, ENV_FILE,
+  readOnboarding, writeOnboarding, needsOnboarding,
+  SETTINGS_FILE, ENV_FILE, ONBOARD_FILE,
 };

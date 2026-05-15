@@ -43,9 +43,9 @@ async function previewSync(playlistId) {
   return { meta, tracks, diff: d, outputDir };
 }
 
-async function processTrack(playlistId, t, outputDir, token, emit) {
-  const targetName = filenameFor(t);
-  const basename = targetName.replace(/\.mp3$/i, '');
+async function processTrack(playlistId, t, outputDir, format, token, emit) {
+  const targetName = filenameFor(t, format);
+  const basename = targetName.replace(new RegExp(`\\.${format}$`, 'i'), '');
   emit({ kind: 'track:start', playlistId, trackId: t.id, name: t.name, artist: t.artists?.[0] || '' });
   try {
     if (token.cancelled) throw new Error('cancelled');
@@ -56,12 +56,13 @@ async function processTrack(playlistId, t, outputDir, token, emit) {
       url: match.url,
       outputDir,
       basename,
+      format,
       onProgress: (pct) => emit({ kind: 'track:progress', playlistId, trackId: t.id, pct }),
       token,
     });
     if (token.cancelled) throw new Error('cancelled');
     await writeTags(filePath, t);
-    state.upsertTrack(playlistId, t.id, { file: path.basename(filePath), isrc: t.isrc || null }, outputDir);
+    state.upsertTrack(playlistId, t.id, { file: path.basename(filePath), ext: format, isrc: t.isrc || null }, outputDir);
     emit({ kind: 'track:done', playlistId, trackId: t.id, file: path.basename(filePath) });
     return { ok: true };
   } catch (e) {
@@ -100,6 +101,7 @@ async function syncPlaylist(playlistId, opts = {}, emit = () => {}) {
   const settings = readSettings();
   const removeOrphans = opts.removeOrphans ?? !!settings.removeOrphans;
   const concurrency = Math.max(1, Math.min(8, opts.concurrency ?? settings.concurrency ?? 4));
+  const format = ['mp3', 'wav', 'flac'].includes(opts.format) ? opts.format : (settings.audioFormat || 'mp3');
   const { outputDir } = settings;
   fs.mkdirSync(outputDir, { recursive: true });
 
@@ -115,7 +117,7 @@ async function syncPlaylist(playlistId, opts = {}, emit = () => {}) {
     emit({ kind: 'diff', playlistId, added: d.added.length, removed: d.removed.length, existing: d.existing.length });
 
     const queue = d.added.map((a) => a.track);
-    const result = await runPool(queue, concurrency, (t) => processTrack(playlistId, t, outputDir, token, emit));
+    const result = await runPool(queue, concurrency, (t) => processTrack(playlistId, t, outputDir, format, token, emit));
 
     if (removeOrphans && !token.cancelled) {
       for (const r of d.removed) {

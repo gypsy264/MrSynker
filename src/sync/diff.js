@@ -5,10 +5,10 @@ function sanitize(s) {
   return String(s || '').replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').replace(/\s+/g, ' ').trim().slice(0, 120);
 }
 
-function filenameFor(track) {
+function filenameFor(track, ext = 'mp3') {
   const artist = sanitize(track.artists?.[0] || 'Unknown Artist');
   const title = sanitize(track.name || 'Unknown Title');
-  return `${artist} - ${title}.mp3`;
+  return `${artist} - ${title}.${ext}`;
 }
 
 function diff(playlistTracks, stateEntry, outputDir) {

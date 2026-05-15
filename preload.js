@@ -7,11 +7,16 @@ contextBridge.exposeInMainWorld('api', {
   getEnv: () => ipcRenderer.invoke('settings:getEnv'),
   setEnv: (patch) => ipcRenderer.invoke('settings:setEnv', patch),
 
+  onboardingStatus: () => ipcRenderer.invoke('onboarding:status'),
+  completeOnboarding: (payload) => ipcRenderer.invoke('onboarding:complete', payload),
+
   addLibraryFromPicker: () => ipcRenderer.invoke('library:addFromPicker'),
   setActiveLibrary: (path) => ipcRenderer.invoke('library:setActive', path),
   removeLibrary: (path) => ipcRenderer.invoke('library:remove', path),
   renameLibrary: (path, name) => ipcRenderer.invoke('library:rename', path, name),
   getTrackedPlaylists: () => ipcRenderer.invoke('library:tracked'),
+  getTrackedTracks: (playlistId, opts) => ipcRenderer.invoke('library:trackedTracks', playlistId, opts || {}),
+  inspectOne: (file) => ipcRenderer.invoke('library:inspectOne', file),
   removeTrackedPlaylist: (playlistId) => ipcRenderer.invoke('library:removeTrackedPlaylist', playlistId),
 
   spotifyStatus: () => ipcRenderer.invoke('spotify:status'),
@@ -25,6 +30,16 @@ contextBridge.exposeInMainWorld('api', {
   startSync: (playlistId, opts) => ipcRenderer.invoke('sync:start', playlistId, opts),
   startSyncAll: (opts) => ipcRenderer.invoke('sync:startAll', opts),
   stopSync: () => ipcRenderer.invoke('sync:stop'),
+
+  windowState: () => ipcRenderer.invoke('window:state'),
+  windowMinimize: () => ipcRenderer.invoke('window:minimize'),
+  windowToggleMaximize: () => ipcRenderer.invoke('window:toggleMaximize'),
+  windowClose: () => ipcRenderer.invoke('window:close'),
+  onWindowMaximized: (cb) => {
+    const listener = (_e, isMaximized) => cb(isMaximized);
+    ipcRenderer.on('window:maximized', listener);
+    return () => ipcRenderer.removeListener('window:maximized', listener);
+  },
 
   onSyncEvent: (cb) => {
     const listener = (_e, payload) => cb(payload);
